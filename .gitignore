@@ -1,0 +1,5 @@
+*.dll
+*.pdb
+
+src/bin
+src/obj
