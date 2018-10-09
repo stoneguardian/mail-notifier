@@ -4,6 +4,10 @@ using MailNotifier.Models;
 using OnlineAccounts.DBus;
 using Tmds.DBus;
 using System.Linq;
+using MailKit;
+using MailKit.Security;
+using MailKit.Net.Imap;
+using System;
 
 namespace MailNotifier.AccountRepositories
 {
@@ -21,51 +25,102 @@ namespace MailNotifier.AccountRepositories
 
         public GnomeOnlineAccounts() { }
 
-        public async Task<IEnumerable<ImapAccount>> GetImapAccounts()
+        private async Task<IEnumerable<GnomeOnlineAccount>> GetAll()
         {
+            var result = new List<GnomeOnlineAccount>();
             var dbusSessionConnection = Connection.Session;
             var manager = dbusSessionConnection.CreateProxy<IObjectManager>(dbusServiceName, dbusRootQueue);
             var managedObjects = await manager.GetManagedObjectsAsync();
-            var objectPaths = managedObjects.Keys;
 
-            var result = new List<ImapAccount>();
-
-            foreach (var path in objectPaths)
+            foreach (var key in managedObjects.Keys)
             {
-                var obj = managedObjects[path];
-
-                // Has no mail account so skip it
-                if (!obj.Keys.Contains(dbusMailAccountServiceName))
-                {
-                    continue;
-                }
-
-                var auth = GetPassword(obj);
-
-                System.Console.WriteLine(path);
-                var mailAccount = await dbusSessionConnection.CreateProxy<IMail>(dbusServiceName, path).GetAllAsync();
-                if (mailAccount.ImapSupported)
-                {
-                    result.Add(ConvertToImapAccount(mailAccount));
-                }
+                result.Add(new GnomeOnlineAccount(key.ToString(), managedObjects[key].Keys));
             }
 
             return result;
         }
 
-        private string GetPassword(IDictionary<string, IDictionary<string, object>> obj)
+        public async Task<IEnumerable<string>> GetAllMailAddresses()
         {
+            var mailAccounts = (await GetAll()).Where(a => a.Interfaces.Contains(dbusMailAccountServiceName));
+            var result = new List<string>(mailAccounts.Count() + 1);
+            var dbusSessionConnection = Connection.Session;
 
+            foreach (var account in mailAccounts)
+            {
+                var dbusAccountManager = dbusSessionConnection.CreateProxy<IMail>(dbusServiceName, account.DbusObjectPath);
+                result.Add(await dbusAccountManager.GetEmailAddressAsync());
+            }
+
+            return result;
         }
 
-
-
-        private ImapAccount ConvertToImapAccount(MailProperties account)
+        public async Task<ImapClient> GetImapClient(string emailAddress)
         {
-            int port = 143;
-            if (account.ImapUseSsl) port = 993;
+            IMail accountManager = null;
+            GnomeOnlineAccount gnomeAccount = null;
 
-            return new ImapAccount(account.ImapUserName, "", account.ImapHost, port, account.ImapUseSsl);
+
+            var mailAccounts = (await GetAll()).Where(a => a.Interfaces.Contains(dbusMailAccountServiceName));
+
+            var dbusSessionConnection = Connection.Session;
+
+            foreach (var account in mailAccounts)
+            {
+                var dbusAccountManager = dbusSessionConnection.CreateProxy<IMail>(dbusServiceName, account.DbusObjectPath);
+                if (emailAddress == await dbusAccountManager.GetEmailAddressAsync())
+                {
+                    accountManager = dbusAccountManager;
+                    gnomeAccount = account;
+                }
+            }
+
+            if (null == accountManager)
+            {
+                throw new ArgumentException("emailAddress not found in Gnome OnlineAccounts");
+            }
+
+
+            var imapClient = new ImapClient();
+            var port = 143;
+
+            if (await accountManager.GetImapUseSslAsync())
+            {
+                port = 993;
+            }
+
+            await imapClient.ConnectAsync(
+                await accountManager.GetImapHostAsync(),
+                port
+            );
+
+            // Determine authentication-scheme
+            var sessionConnection = Connection.Session;
+            var username = await accountManager.GetImapUserNameAsync();
+            SaslMechanism cred = null;
+
+            if (gnomeAccount.Interfaces.Contains(dbusOAuth2BasedAuth) || gnomeAccount.Interfaces.Contains(dbusOAuthBasedAuth))
+            {
+                var oAuth2Manager = sessionConnection.CreateProxy<IOAuth2Based>(dbusServiceName, gnomeAccount.DbusObjectPath);
+                (var token, var expiry) = await oAuth2Manager.GetAccessTokenAsync();
+
+                cred = new SaslMechanismOAuth2(username, token);
+            }
+            else if (gnomeAccount.Interfaces.Contains(dbusPasswordBasedAuth))
+            {
+                var passwordManager = sessionConnection.CreateProxy<IPasswordBased>(dbusServiceName, gnomeAccount.DbusObjectPath);
+                var password = await passwordManager.GetPasswordAsync("imap-password");
+
+                cred = new SaslMechanismLogin(username, password);
+            }
+            else
+            {
+                throw new Exception("Could not extract credentials from Gnome");
+            }
+
+            await imapClient.AuthenticateAsync(cred);
+
+            return imapClient;
         }
     }
 }
