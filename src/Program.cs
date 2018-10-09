@@ -7,6 +7,7 @@ using MailNotifier.AccountRepositories;
 using MailKit;
 using MailKit.Security;
 using MailKit.Search;
+using MailNotifier.Models;
 
 namespace MailNotifier
 {
@@ -48,19 +49,7 @@ namespace MailNotifier
                                 break;
                         }
 
-                        var process = new System.Diagnostics.Process
-                        {
-                            StartInfo = new System.Diagnostics.ProcessStartInfo
-                            {
-                                FileName = "/bin/sh",
-                                Arguments = $"-c \"notify-send '{account}' '{notificationMessage}'\"",
-                                CreateNoWindow = true
-                            }
-                        };
-
-                        Console.WriteLine("Sending notification...");
-                        process.Start();
-                        process.WaitForExit();
+                        NotificationHandler.Send(new Notification(account, notificationMessage));
                     }
 
 
