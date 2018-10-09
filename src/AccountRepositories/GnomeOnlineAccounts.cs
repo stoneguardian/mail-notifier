@@ -14,7 +14,7 @@ namespace MailNotifier.AccountRepositories
     public class GnomeOnlineAccounts
     {
         private readonly string dbusServiceName = "org.gnome.OnlineAccounts";
-        private readonly string dbusRootQueue = "/org/gnome/OnlineAccounts";
+        private readonly string dbusRootObjectPath = "/org/gnome/OnlineAccounts";
 
         private readonly string dbusMailAccountServiceName = "org.gnome.OnlineAccounts.Mail";
 
@@ -29,7 +29,7 @@ namespace MailNotifier.AccountRepositories
         {
             var result = new List<GnomeOnlineAccount>();
             var dbusSessionConnection = Connection.Session;
-            var manager = dbusSessionConnection.CreateProxy<IObjectManager>(dbusServiceName, dbusRootQueue);
+            var manager = dbusSessionConnection.CreateProxy<IObjectManager>(dbusServiceName, dbusRootObjectPath);
             var managedObjects = await manager.GetManagedObjectsAsync();
 
             foreach (var key in managedObjects.Keys)
