@@ -43,11 +43,11 @@ namespace MailNotifier
                         var message = "";
                         if (numMessagesToNotifyOf == 1)
                         {
-                            message = "There is 1 unread message";
+                            message = "You have 1 unread message";
                         }
                         else
                         {
-                            message = $"Tere are {numMessagesToNotifyOf} unread messages";
+                            message = $"You have {numMessagesToNotifyOf} unread messages";
                         }
 
                         Console.WriteLine("Sending notification");
