@@ -8,6 +8,8 @@ using MailKit;
 using MailKit.Security;
 using MailKit.Search;
 using MailNotifier.Models;
+using System.IO;
+using System.Linq;
 
 namespace MailNotifier
 {
@@ -15,47 +17,48 @@ namespace MailNotifier
     {
         static async Task Main(string[] args)
         {
-            Console.WriteLine("Getting gnome accounts...");
+            // App Start
+            var cache = new Cache();
             var gnomeRepo = new GnomeOnlineAccounts();
             var accounts = await gnomeRepo.GetAllMailAddresses();
 
             foreach (var account in accounts)
             {
+                var messagesAlreadyNotified = cache.GetNotifiedMessages(account);
+
                 Console.WriteLine($"Connecting to: {account}");
                 using (var client = await gnomeRepo.GetImapClient(account))
                 {
                     var inbox = client.Inbox;
                     await inbox.OpenAsync(FolderAccess.ReadOnly);
-                    Console.WriteLine($"Total messages in inbox: {inbox.Count}");
 
+                    // Find all unread messages in inbox
                     var unread = await inbox.SearchAsync(SearchQuery.NotSeen);
-                    Console.WriteLine($"Total unread (1): {unread.Count}");
 
-                    var unread2 = await inbox.SearchAsync(SearchQuery.New);
-                    Console.WriteLine($"Total unread (2, new):  {unread2.Count}");
+                    // Filter out messages we have already sent notification for
+                    var numMessagesToNotifyOf = unread.Where(m => !messagesAlreadyNotified.Contains(m.Id)).Count();
 
-                    if (unread2.Count > 0)
+                    if (numMessagesToNotifyOf > 0)
                     {
-                        var notificationMessage = "";
-
-                        switch (unread2.Count)
+                        var message = "";
+                        if (numMessagesToNotifyOf == 1)
                         {
-                            case 1:
-                                notificationMessage = string.Format("There is {0} unread message", unread2.Count);
-                                break;
-
-                            default:
-                                notificationMessage = string.Format("There are {0} unread messages", unread2.Count);
-                                break;
+                            message = "There is 1 unread message";
+                        }
+                        else
+                        {
+                            message = $"Tere are {numMessagesToNotifyOf} unread messages";
                         }
 
-                        NotificationHandler.Send(new Notification(account, notificationMessage));
-                    }
+                        Console.WriteLine("Sending notification");
+                        NotificationHandler.Send(new Notification(account, message));
 
+                        // Update cache with all unread messages
+                        cache.CacheNotifiedMessages(account, unread.Select(m => m.Id));
+                    }
 
                     Console.WriteLine("Disconnecting...\n");
                     await client.DisconnectAsync(true);
-
                 }
             }
         }
