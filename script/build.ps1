@@ -16,7 +16,6 @@ param(
 $OutputPath += "/$Configuration"
 
 $csprojFile = Get-ChildItem -Path $ProjectDirectory -Filter '*.csproj'
-
 if ($null -eq $csprojFile)
 {
     Write-Error -Message "Could not find a csproj-file in: $ProjectDirectory" -ErrorAction Stop
@@ -25,6 +24,7 @@ if ($null -eq $csprojFile)
 Write-Host "---Cleaning:"
 dotnet clean $ProjectDirectory --output $OutputPath --configuration $Configuration
 
+
 Write-Host "`n---Building:"
 if ($Configuration -eq 'debug')
 {
@@ -32,6 +32,7 @@ if ($Configuration -eq 'debug')
 }
 elseif ($Configuration -eq 'release')
 {
+    # If release, copy in dependent .dlls also
     dotnet publish $ProjectDirectory --output $OutputPath
 }
 else
@@ -39,6 +40,7 @@ else
     Write-Error -Message "Unknown configuration: $Configuration" -ErrorAction Stop
 }
 
+# Run resulting dll
 if ($AndRun)
 {
     $outputSubDir = Get-ChildItem -Path $OutputPath -Directory | Select-Object -First 1
