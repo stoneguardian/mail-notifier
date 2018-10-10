@@ -5,6 +5,7 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <RootNamespace>MailNotifier</RootNamespace>
     <LangVersion>7.1</LangVersion>
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
